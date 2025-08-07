@@ -21,6 +21,7 @@ A blockchain-based solution that enables microfactories to issue, track, and ver
 - **Verification System**: Third-party verifier approval process  
 - **Transfer & Trading**: Peer-to-peer credit transfers
 - **Credit Retirement**: Permanent retirement for carbon offsetting
+- **Integrated Marketplace**: Built-in STX-based trading with price discovery
 - **Supply Tracking**: Real-time monitoring of total credit supply
 
 ## 🛠️ Contract Functions
@@ -40,12 +41,19 @@ A blockchain-based solution that enables microfactories to issue, track, and ver
 - `transfer-carbon-credit` - Transfer credits between users
 - `retire-carbon-credit` - Permanently retire credits
 
+### 🏪 Marketplace Operations
+- `create-marketplace-listing` - List verified credits for sale with STX pricing
+- `buy-marketplace-listing` - Purchase credits directly from marketplace
+- `cancel-marketplace-listing` - Remove active listings
+
 ### 📊 Read-Only Functions
 - `get-factory-info` - Factory details and stats
 - `get-carbon-credit-info` - Credit details and verification status
 - `get-credit-balance` - User balance for specific credit
 - `get-verifier-info` - Verifier credentials and status
 - `get-total-credits-supply` - Total circulating supply
+- `get-marketplace-listing` - Marketplace listing details
+- `get-next-listing-id` - Next available listing ID
 
 ## 🚀 Quick Start
 
@@ -97,7 +105,17 @@ clarinet deploy --testnet
 (contract-call? .contract transfer-carbon-credit u1 u500 'SP2J6ZY48GV1EZ5V2V5RB9MP66SW86PYKKNRV9EJ7)
 ```
 
-### 6. Retire Credits
+### 6. Create Marketplace Listing
+```clarity
+(contract-call? .contract create-marketplace-listing u1 u500 u1000000)
+```
+
+### 7. Buy from Marketplace
+```clarity
+(contract-call? .contract buy-marketplace-listing u1)
+```
+
+### 8. Retire Credits
 ```clarity
 (contract-call? .contract retire-carbon-credit u1 u250)
 ```
@@ -114,6 +132,10 @@ clarinet deploy --testnet
 - `u107` - Not verified
 - `u108` - Factory already registered
 - `u109` - Verifier already registered
+- `u110` - Listing not found
+- `u111` - Insufficient payment
+- `u112` - Listing already exists
+- `u113` - Cannot buy own listing
 
 ## 🌟 Benefits
 

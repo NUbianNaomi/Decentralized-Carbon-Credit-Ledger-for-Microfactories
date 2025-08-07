@@ -9,6 +9,10 @@
 (define-constant err-not-verified (err u107))
 (define-constant err-factory-already-registered (err u108))
 (define-constant err-verifier-already-registered (err u109))
+(define-constant err-listing-not-found (err u110))
+(define-constant err-insufficient-payment (err u111))
+(define-constant err-listing-already-exists (err u112))
+(define-constant err-cannot-buy-own-listing (err u113))
 
 (define-map factories 
   { factory-address: principal }
@@ -48,8 +52,22 @@
   }
 )
 
+(define-map marketplace-listings
+  { listing-id: uint }
+  {
+    seller: principal,
+    credit-id: uint,
+    amount: uint,
+    price-per-credit: uint,
+    total-price: uint,
+    is-active: bool,
+    created-at: uint
+  }
+)
+
 (define-data-var next-credit-id uint u1)
 (define-data-var total-credits-supply uint u0)
+(define-data-var next-listing-id uint u1)
 
 (define-public (register-factory (name (string-ascii 50)) (location (string-ascii 100)))
   (begin
@@ -253,4 +271,93 @@
     )
     (ok true)
   )
+)
+
+(define-public (create-marketplace-listing (credit-id uint) (amount uint) (price-per-credit uint))
+  (let (
+    (listing-id (var-get next-listing-id))
+    (credit-info (unwrap! (map-get? carbon-credits { credit-id: credit-id }) err-credit-not-found))
+    (seller-balance (default-to u0 (get balance (map-get? credit-balances { owner: tx-sender, credit-id: credit-id }))))
+    (total-price (* amount price-per-credit))
+  )
+    (asserts! (> amount u0) err-invalid-amount)
+    (asserts! (> price-per-credit u0) err-invalid-amount)
+    (asserts! (>= seller-balance amount) err-insufficient-balance)
+    (asserts! (is-eq (get verification-status credit-info) "verified") err-not-verified)
+    
+    (map-set marketplace-listings
+      { listing-id: listing-id }
+      {
+        seller: tx-sender,
+        credit-id: credit-id,
+        amount: amount,
+        price-per-credit: price-per-credit,
+        total-price: total-price,
+        is-active: true,
+        created-at: stacks-block-height
+      }
+    )
+    
+    (var-set next-listing-id (+ listing-id u1))
+    (ok listing-id)
+  )
+)
+
+(define-public (buy-marketplace-listing (listing-id uint))
+  (let (
+    (listing-info (unwrap! (map-get? marketplace-listings { listing-id: listing-id }) err-listing-not-found))
+    (seller (get seller listing-info))
+    (credit-id (get credit-id listing-info))
+    (amount (get amount listing-info))
+    (total-price (get total-price listing-info))
+    (seller-balance (default-to u0 (get balance (map-get? credit-balances { owner: seller, credit-id: credit-id }))))
+    (buyer-balance (default-to u0 (get balance (map-get? credit-balances { owner: tx-sender, credit-id: credit-id }))))
+  )
+    (asserts! (get is-active listing-info) err-listing-not-found)
+    (asserts! (not (is-eq tx-sender seller)) err-cannot-buy-own-listing)
+    (asserts! (>= seller-balance amount) err-insufficient-balance)
+    
+    (try! (stx-transfer? total-price tx-sender seller))
+    
+    (map-set credit-balances
+      { owner: seller, credit-id: credit-id }
+      { balance: (- seller-balance amount) }
+    )
+    
+    (map-set credit-balances
+      { owner: tx-sender, credit-id: credit-id }
+      { balance: (+ buyer-balance amount) }
+    )
+    
+    (map-set marketplace-listings
+      { listing-id: listing-id }
+      (merge listing-info { is-active: false })
+    )
+    
+    (ok true)
+  )
+)
+
+(define-public (cancel-marketplace-listing (listing-id uint))
+  (let (
+    (listing-info (unwrap! (map-get? marketplace-listings { listing-id: listing-id }) err-listing-not-found))
+  )
+    (asserts! (get is-active listing-info) err-listing-not-found)
+    (asserts! (is-eq tx-sender (get seller listing-info)) err-not-authorized)
+    
+    (map-set marketplace-listings
+      { listing-id: listing-id }
+      (merge listing-info { is-active: false })
+    )
+    
+    (ok true)
+  )
+)
+
+(define-read-only (get-marketplace-listing (listing-id uint))
+  (map-get? marketplace-listings { listing-id: listing-id })
+)
+
+(define-read-only (get-next-listing-id)
+  (var-get next-listing-id)
 )
