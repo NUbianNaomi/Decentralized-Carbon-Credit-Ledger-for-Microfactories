@@ -13,6 +13,7 @@
 (define-constant err-insufficient-payment (err u111))
 (define-constant err-listing-already-exists (err u112))
 (define-constant err-cannot-buy-own-listing (err u113))
+(define-constant err-batch-transfer-failed (err u114))
 
 (define-map factories 
   { factory-address: principal }
@@ -82,6 +83,12 @@
         total-credits-issued: u0
       }
     )
+    (ok true)
+  )
+)
+(define-public (update-factory-info (name (string-ascii 50)) (location (string-ascii 100)))
+  (let ((factory-info (unwrap! (map-get? factories { factory-address: tx-sender }) err-factory-not-registered)))
+    (map-set factories { factory-address: tx-sender } (merge factory-info { name: name, location: location }))
     (ok true)
   )
 )
@@ -200,6 +207,35 @@
     )
     
     (ok true)
+  )
+)
+
+(define-private (check-and-transfer (transfer { credit-id: uint, amount: uint, recipient: principal }) (result (response bool uint)))
+  (match result
+    ok (let (
+      (credit-id (get credit-id transfer))
+      (amount (get amount transfer))
+      (recipient (get recipient transfer))
+      (credit-info (unwrap! (map-get? carbon-credits { credit-id: credit-id }) err-credit-not-found))
+      (sender-balance (default-to u0 (get balance (map-get? credit-balances { owner: tx-sender, credit-id: credit-id }))))
+      (recipient-balance (default-to u0 (get balance (map-get? credit-balances { owner: recipient, credit-id: credit-id }))))
+    )
+    (begin
+      (asserts! (> amount u0) err-invalid-amount)
+      (asserts! (>= sender-balance amount) err-insufficient-balance)
+      (asserts! (is-eq (get verification-status credit-info) "verified") err-not-verified)
+      (map-set credit-balances { owner: tx-sender, credit-id: credit-id } { balance: (- sender-balance amount) })
+      (map-set credit-balances { owner: recipient, credit-id: credit-id } { balance: (+ recipient-balance amount) })
+      (ok true)
+    ))
+    err result
+  )
+)
+
+(define-public (batch-transfer-carbon-credits (transfers (list 10 { credit-id: uint, amount: uint, recipient: principal })))
+  (begin
+    (asserts! (> (len transfers) u0) err-invalid-amount)
+    (fold check-and-transfer transfers (ok true))
   )
 )
 
