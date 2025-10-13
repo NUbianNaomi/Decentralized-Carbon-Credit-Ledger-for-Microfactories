@@ -14,6 +14,7 @@
 (define-constant err-listing-already-exists (err u112))
 (define-constant err-cannot-buy-own-listing (err u113))
 (define-constant err-batch-transfer-failed (err u114))
+(define-constant err-split-amount-exceeds-balance (err u115))
 
 (define-map factories 
   { factory-address: principal }
@@ -236,6 +237,63 @@
   (begin
     (asserts! (> (len transfers) u0) err-invalid-amount)
     (fold check-and-transfer transfers (ok true))
+  )
+)
+
+(define-public (split-carbon-credit (credit-id uint) (split-amounts (list 10 uint)))
+  (let (
+    (credit-info (unwrap! (map-get? carbon-credits { credit-id: credit-id }) err-credit-not-found))
+    (user-balance (default-to u0 (get balance (map-get? credit-balances { owner: tx-sender, credit-id: credit-id }))))
+    (total-split-amount (fold + split-amounts u0))
+  )
+    (asserts! (> (len split-amounts) u0) err-invalid-amount)
+    (asserts! (>= user-balance total-split-amount) err-split-amount-exceeds-balance)
+    (asserts! (is-eq (get verification-status credit-info) "verified") err-not-verified)
+    (asserts! (is-eq total-split-amount user-balance) err-invalid-amount)
+
+    (map-set credit-balances
+      { owner: tx-sender, credit-id: credit-id }
+      { balance: u0 }
+    )
+
+    (let (
+      (ids1 (if (>= (len split-amounts) u1) (create-new-credit (unwrap-panic (element-at split-amounts u0)) credit-info) u0))
+      (ids2 (if (>= (len split-amounts) u2) (create-new-credit (unwrap-panic (element-at split-amounts u1)) credit-info) u0))
+      (ids3 (if (>= (len split-amounts) u3) (create-new-credit (unwrap-panic (element-at split-amounts u2)) credit-info) u0))
+      (ids4 (if (>= (len split-amounts) u4) (create-new-credit (unwrap-panic (element-at split-amounts u3)) credit-info) u0))
+      (ids5 (if (>= (len split-amounts) u5) (create-new-credit (unwrap-panic (element-at split-amounts u4)) credit-info) u0))
+      (ids6 (if (>= (len split-amounts) u6) (create-new-credit (unwrap-panic (element-at split-amounts u5)) credit-info) u0))
+      (ids7 (if (>= (len split-amounts) u7) (create-new-credit (unwrap-panic (element-at split-amounts u6)) credit-info) u0))
+      (ids8 (if (>= (len split-amounts) u8) (create-new-credit (unwrap-panic (element-at split-amounts u7)) credit-info) u0))
+      (ids9 (if (>= (len split-amounts) u9) (create-new-credit (unwrap-panic (element-at split-amounts u8)) credit-info) u0))
+      (ids10 (if (>= (len split-amounts) u10) (create-new-credit (unwrap-panic (element-at split-amounts u9)) credit-info) u0))
+    )
+      (ok (list ids1 ids2 ids3 ids4 ids5 ids6 ids7 ids8 ids9 ids10))
+    )
+  )
+)
+
+(define-private (create-new-credit (amount uint) (credit-info { factory: principal, amount: uint, verification-status: (string-ascii 20), issue-block: uint, metadata: (string-ascii 200), verifier: (optional principal) }))
+  (let (
+    (new-id (var-get next-credit-id))
+  )
+    (map-set carbon-credits
+      { credit-id: new-id }
+      {
+        factory: (get factory credit-info),
+        amount: amount,
+        verification-status: "verified",
+        issue-block: stacks-block-height,
+        metadata: (get metadata credit-info),
+        verifier: (get verifier credit-info)
+      }
+    )
+    (map-set credit-balances
+      { owner: tx-sender, credit-id: new-id }
+      { balance: amount }
+    )
+    (var-set next-credit-id (+ new-id u1))
+    new-id
   )
 )
 
